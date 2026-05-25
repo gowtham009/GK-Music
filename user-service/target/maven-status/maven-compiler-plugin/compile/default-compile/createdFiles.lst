@@ -1,0 +1,7 @@
+com\gkmusic\user\UserServiceApplication.class
+com\gkmusic\user\web\UserController$UserProfileResponse.class
+com\gkmusic\user\web\UserController.class
+com\gkmusic\user\config\SecurityConfig.class
+com\gkmusic\user\web\UserController$UpdateMeRequest.class
+com\gkmusic\user\db\UserProfile.class
+com\gkmusic\user\db\UserProfileRepository.class

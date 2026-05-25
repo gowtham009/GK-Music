@@ -1,0 +1,10 @@
+com\gkmusic\auth\web\AuthController$RegisterResponse.class
+com\gkmusic\auth\web\AuthController.class
+com\gkmusic\auth\web\AuthController$LoginResponse.class
+com\gkmusic\auth\config\SecurityConfig.class
+com\gkmusic\auth\AuthServiceApplication.class
+com\gkmusic\auth\web\AuthController$RegisterRequest.class
+com\gkmusic\auth\db\AuthUserRepository.class
+com\gkmusic\auth\jwt\JwtService.class
+com\gkmusic\auth\db\AuthUser.class
+com\gkmusic\auth\web\AuthController$LoginRequest.class

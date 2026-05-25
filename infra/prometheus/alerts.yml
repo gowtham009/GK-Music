@@ -1,0 +1,40 @@
+groups:
+  - name: gk-music
+    rules:
+      - alert: ServiceDown
+        expr: up{job="spring"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service down ({{ $labels.instance }})"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for 1m."
+
+      - alert: High5xxRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{job="spring",outcome="SERVER_ERROR"}[5m])) by (instance)
+          /
+            sum(rate(http_server_requests_seconds_count{job="spring"}[5m])) by (instance)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx rate ({{ $labels.instance }})"
+          description: "More than 5% of requests are failing with 5xx for 5m."
+
+      - alert: HighJvmMemory
+        expr: |
+          (
+            sum(jvm_memory_used_bytes{job="spring",area="heap"}) by (instance)
+          /
+            sum(jvm_memory_max_bytes{job="spring",area="heap"}) by (instance)
+          ) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High JVM heap usage ({{ $labels.instance }})"
+          description: "Heap usage > 85% for 5m."
+
