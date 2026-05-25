@@ -1,4 +1,4 @@
-# GK Music (Wynk-like) — Spring Boot Microservices
+# GK Music — Spring Boot Microservices
 
 This repository is a working microservices backend for a Wynk Music–style application (authentication, user profile, song catalog, search, playlists, favorites, play history) with local infrastructure and production-style observability (metrics, tracing, dashboards, alerts).
 
