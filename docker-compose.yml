@@ -1,0 +1,182 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2024-06-11T03-13-30Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-06-12T14-34-03Z
+    depends_on:
+      - minio
+    environment:
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: gk-music
+    entrypoint: ["/bin/sh", "/init.sh"]
+    volumes:
+      - ./infra/minio/init.sh:/init.sh:ro
+
+  discovery-service:
+    build:
+      context: .
+      dockerfile: discovery-service/Dockerfile
+    ports:
+      - "8761:8761"
+    environment:
+      OTLP_ENDPOINT: http://tempo:4318/v1/traces
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery-service:
+        condition: service_started
+    ports:
+      - "8081:8081"
+    environment:
+      EUREKA_URL: http://discovery-service:8761/eureka
+      AUTH_DB_URL: jdbc:postgresql://postgres:5432/authdb
+      AUTH_DB_USER: auth
+      AUTH_DB_PASSWORD: auth
+      JWT_SECRET: change-me-in-env-32-chars-minimum
+      OTLP_ENDPOINT: http://tempo:4318/v1/traces
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery-service:
+        condition: service_started
+    ports:
+      - "8082:8082"
+    environment:
+      EUREKA_URL: http://discovery-service:8761/eureka
+      USER_DB_URL: jdbc:postgresql://postgres:5432/userdb
+      USER_DB_USER: user
+      USER_DB_PASSWORD: user
+      JWT_SECRET: change-me-in-env-32-chars-minimum
+      OTLP_ENDPOINT: http://tempo:4318/v1/traces
+
+  music-service:
+    build:
+      context: .
+      dockerfile: music-service/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_started
+      discovery-service:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    environment:
+      EUREKA_URL: http://discovery-service:8761/eureka
+      MUSIC_DB_URL: jdbc:postgresql://postgres:5432/musicdb
+      MUSIC_DB_USER: music
+      MUSIC_DB_PASSWORD: music
+      JWT_SECRET: change-me-in-env-32-chars-minimum
+      # Use a host-browser reachable hostname for presigned URLs.
+      # Music-service signs URLs with this host, so it must match what the browser uses.
+      MINIO_URL: http://localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: gk-music
+      OTLP_ENDPOINT: http://tempo:4318/v1/traces
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    depends_on:
+      - discovery-service
+      - auth-service
+      - user-service
+      - music-service
+    ports:
+      - "8080:8080"
+    environment:
+      EUREKA_URL: http://discovery-service:8761/eureka
+      JWT_SECRET: change-me-in-env-32-chars-minimum
+      OTLP_ENDPOINT: http://tempo:4318/v1/traces
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./infra/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+  tempo:
+    image: grafana/tempo:2.5.0
+    command: ["-config.file=/etc/tempo.yml"]
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./infra/tempo/tempo.yml:/etc/tempo.yml:ro
+
+  loki:
+    image: grafana/loki:2.9.8
+    command: ["-config.file=/etc/loki.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./infra/loki/loki.yml:/etc/loki.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/etc/grafana/dashboards:ro
+
+volumes:
+  postgres_data:
+  minio_data:
